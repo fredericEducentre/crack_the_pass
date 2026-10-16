@@ -114,6 +114,9 @@
     caracteres: { name: 'Caractères', blurb: 'Tout le clavier : lettres, chiffres et symboles.' },
   };
   const categoryName = (id) => (CATEGORIES[id] ? CATEGORIES[id].name : id);
+  // Petit mot pour un niveau verrouillé : un seul prérequis ("le niveau 4").
+  const lockedLabel = (requires) =>
+    requires.length > 1 ? `les niveaux ${requires.join(', ')}` : `le niveau ${requires[0]}`;
 
   function go(hash) {
     if (location.hash === hash) route();
@@ -143,6 +146,9 @@
     nav.replaceChildren(
       h('a', { class: 'link' + (page === 'levels' || page === 'play' ? ' current' : ''), href: '#/levels' }, 'Niveaux'),
       h('a', { class: 'link' + (page === 'leaderboard' ? ' current' : ''), href: '#/leaderboard' }, 'Classement'),
+      state.user.isAdmin
+        ? h('a', { class: 'link' + (page === 'admin' ? ' current' : ''), href: '#/admin' }, 'Base de données')
+        : null,
       h('span', { class: 'who' }, state.user.username),
       h('button', {
         class: 'btn ghost sm',
@@ -249,7 +255,7 @@
     let badge, action, best;
     if (!p.unlocked) {
       badge = h('span', { class: 'badge' }, 'Verrouillé');
-      action = h('button', { class: 'btn', disabled: true }, `Cassez d'abord le niveau ${p.prev}`);
+      action = h('button', { class: 'btn', disabled: true }, `Cassez d'abord ${lockedLabel(p.requires)}`);
     } else if (p.active) {
       badge = h('span', { class: 'badge progress' }, 'En cours');
       action = h('a', { class: 'btn primary', href: `#/play/${p.level}` }, 'Reprendre');
@@ -395,6 +401,25 @@
     );
   }
 
+  // Un encart statique décrivant le défi bonus : un VRAI compte que l'enseignant crée lui-même
+  // (voir scripts/create-admin.js), hors du système de niveaux. Pas de secret, pas de chrono, pas
+  // d'entrée dans le classement : juste le formulaire de connexion normal.
+  function bonusChallengeBlock() {
+    return h('section', { class: 'card bonus-challenge' },
+      h('p', { class: 'eyebrow' }, 'Défi bonus (facultatif)'),
+      h('h2', null, 'Le compte administrateur'),
+      h('p', { class: 'muted' },
+        'Votre enseignant a peut-être créé un vrai compte sur ce serveur, par exemple ',
+        h('code', null, 'admin'), ', avec un vrai mot de passe. Essayez de vous y connecter avec le ' +
+        'formulaire de connexion habituel (déconnectez-vous d\'abord, puis entrez ce nom ' +
+        'd\'utilisateur et un mot de passe à deviner).'),
+      h('p', { class: 'muted small' },
+        'Ce n\'est pas un niveau : il n\'y a pas de secret généré par le jeu, pas de chrono, et il ' +
+        'n\'apparaît pas dans le classement. Les tentatives de connexion restent limitées comme ' +
+        'pour n\'importe quel compte (10 essais ratés toutes les 15 minutes) : même un mot de passe ' +
+        'court peut résister longtemps si les connexions sont ainsi limitées.'));
+  }
+
   async function renderLevels() {
     await loadMe();
     renderNav('levels');
@@ -430,6 +455,7 @@
             h('p', { class: 'muted' }, `${CATEGORIES[id].blurb} ${choices} choix par caractère.`)),
           h('div', { class: 'levels' }, levels.map(levelCard)));
       }).filter(Boolean),
+      bonusChallengeBlock(),
       apiHowtoBlock()
     );
   }
@@ -440,7 +466,7 @@
     renderNav('play');
     const p = state.progress.find((x) => x.level === level);
     if (!p) return app.replaceChildren(errorCard("Ce niveau n'existe pas."));
-    if (!p.unlocked) return app.replaceChildren(errorCard(`Cassez d'abord le niveau ${p.prev} pour débloquer le niveau ${level}.`));
+    if (!p.unlocked) return app.replaceChildren(errorCard(`Cassez d'abord ${lockedLabel(p.requires)} pour débloquer le niveau ${level}.`));
     if (p.active) return runLevel(level, p.active);
     readyScreen(p);
   }
@@ -594,9 +620,9 @@
 
   // ---------------------------------------------------------- success view ---
   function renderSuccess(level, r) {
-    // Le niveau suivant est celui de la même catégorie qui demande celui-ci (s'il existe).
     const current = state.progress.find((x) => x.level === level);
-    const next = state.progress.find((x) => x.prev === level);
+    // Le niveau suivant est celui qui demande celui-ci (tous les niveaux actuels n'ont qu'un seul prérequis).
+    const next = state.progress.find((x) => x.requires.includes(level));
     const hasNext = !!next;
     const stat = (label, value) => h('div', null, h('dt', null, label), h('dd', null, value));
     app.replaceChildren(
@@ -611,12 +637,93 @@
           stat('Terminé à', fmtClock(r.finishedAt))
         ),
         h('div', { class: 'actions' },
-          hasNext ? h('a', { class: 'btn primary', href: `#/play/${next.level}` }, 'Niveau suivant →') : h('a', { class: 'btn primary', href: '#/levels' }, 'Choisir une autre catégorie'),
+          hasNext ? h('a', { class: 'btn primary', href: `#/play/${next.level}` }, 'Niveau suivant →')
+            : h('a', { class: 'btn primary', href: '#/levels' }, 'Choisir une autre catégorie'),
           h('a', { class: 'btn', href: `#/leaderboard/${level}` }, 'Voir le classement'),
           h('button', { class: 'btn ghost', onclick: () => route() }, 'Rejouer (nouveau mot de passe)')
         )
       )
     );
+  }
+
+  // ------------------------------------------------------------- admin page ---
+  // Lecture seule : cette page n'a aucun bouton d'ajout, de modification ou de suppression,
+  // et ne fait que lire /api/admin/overview (un GET). Le serveur refuse l'accès à qui n'est
+  // pas le compte admin (403), donc un élève qui tape l'URL à la main voit une erreur, pas les données.
+  function adminUsersTable(users, filter) {
+    const rows = users.filter((u) => u.username.toLowerCase().includes(filter));
+    if (!rows.length) return h('p', { class: 'empty' }, 'Aucun compte ne correspond.');
+    return h('div', { class: 'table-scroll' },
+      h('table', null,
+        h('thead', null, h('tr', null, h('th', null, 'ID'), h('th', null, 'Nom d\'utilisateur'), h('th', null, 'Créé le'))),
+        h('tbody', null, rows.map((u) =>
+          h('tr', null,
+            h('td', { class: 'num' }, u.id),
+            h('td', null, u.username),
+            h('td', null, fmtClock(u.createdAt)))))));
+  }
+
+  function adminAttemptsTable(attempts, filter) {
+    const rows = attempts.filter((a) => a.username.toLowerCase().includes(filter));
+    if (!rows.length) return h('p', { class: 'empty' }, 'Aucune tentative ne correspond.');
+    const statusLabel = { active: 'en cours', done: 'cassé', abandoned: 'abandonné' };
+    return h('div', { class: 'table-scroll' },
+      h('table', null,
+        h('thead', null, h('tr', null,
+          h('th', null, 'ID'), h('th', null, 'Élève'), h('th', null, 'Niveau'), h('th', null, 'Secret'),
+          h('th', null, 'Statut'), h('th', { class: 'num' }, 'Essais'), h('th', null, 'Démarré'),
+          h('th', null, 'Terminé'), h('th', { class: 'num' }, 'Temps'))),
+        h('tbody', null, rows.map((a) =>
+          h('tr', null,
+            h('td', { class: 'num' }, a.id),
+            h('td', null, a.username),
+            h('td', { class: 'num' }, a.level),
+            h('td', null, h('code', null, a.secret)),
+            h('td', null, statusLabel[a.status] || a.status),
+            h('td', { class: 'num' }, a.guesses.toLocaleString('fr-FR')),
+            h('td', null, fmtClock(a.startedAt)),
+            h('td', null, a.finishedAt ? fmtClock(a.finishedAt) : '—'),
+            h('td', { class: 'num' }, a.durationMs != null ? fmtDuration(a.durationMs) : '—'))))));
+  }
+
+  async function renderAdmin() {
+    renderNav('admin');
+    if (!state.user.isAdmin) return app.replaceChildren(errorCard('Cette page est réservée au compte administrateur.'));
+
+    const search = h('input', { type: 'text', placeholder: 'Filtrer par élève…', class: 'admin-search' });
+    const usersBox = h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Chargement…'));
+    const attemptsBox = h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Chargement…'));
+
+    app.replaceChildren(
+      h('section', null,
+        h('p', { class: 'eyebrow' }, 'Lecture seule'),
+        h('h1', null, 'Base de données'),
+        h('p', { class: 'muted' },
+          'Tous les comptes et toutes les tentatives, tous élèves confondus. Cette page ne permet ' +
+          'ni d\'ajouter, ni de modifier, ni de supprimer quoi que ce soit — uniquement de lire.'),
+        h('div', { class: 'field' }, search),
+        h('h2', null, `Comptes`),
+        usersBox,
+        h('h2', null, 'Tentatives'),
+        attemptsBox)
+    );
+
+    let data;
+    try {
+      data = await api('/admin/overview');
+    } catch (ex) {
+      usersBox.replaceChildren(h('p', { class: 'empty' }, ex.message));
+      attemptsBox.replaceChildren();
+      return;
+    }
+
+    const paint = () => {
+      const filter = search.value.trim().toLowerCase();
+      usersBox.replaceChildren(adminUsersTable(data.users, filter));
+      attemptsBox.replaceChildren(adminAttemptsTable(data.attempts, filter));
+    };
+    search.addEventListener('input', paint);
+    paint();
   }
 
   // --------------------------------------------------------- leaderboard ---
@@ -702,6 +809,7 @@
     try {
       if (page === 'play') await renderPlay(Number(arg));
       else if (page === 'leaderboard') await renderLeaderboard(arg || 'overall');
+      else if (page === 'admin') await renderAdmin();
       else if (page === 'login' || page === 'register') go('#/levels');
       else await renderLevels();
     } catch (e) {

@@ -33,17 +33,24 @@ const CATEGORIES = [
   { id: 'caracteres', charset: ANY, lengths: [1, 2, 3, 4, 8] },
 ];
 // Level ids are numbered 1, 2, 3... across all categories (the API uses these ids).
-// `prev` is the level that must be cracked first (null = open from the start).
+// `requires` lists the levels that must be cracked first ([] = open from the start).
 const LEVEL_DEFS = {};
 let nextId = 1;
 for (const cat of CATEGORIES) {
   let prev = null;
   for (const length of cat.lengths) {
-    LEVEL_DEFS[nextId] = { category: cat.id, length, charset: cat.charset, prev };
+    LEVEL_DEFS[nextId] = { category: cat.id, length, charset: cat.charset, requires: prev === null ? [] : [prev] };
     prev = nextId++;
   }
 }
+
 const LEVELS = Object.keys(LEVEL_DEFS).map(Number); // [1, 2, ..., 13]
+
+// Usernames nobody can self-register with the public sign-up form. Kept free for the teacher to
+// create by hand (see scripts/create-admin.js) as a real account for the optional "bonus
+// challenge": students try to log into it, through the normal /api/login, like any other account.
+// It is not a game level: no secret, no timer, no leaderboard entry - just the real login form.
+const RESERVED_USERNAMES = new Set(['admin', 'administrateur', 'administrator', 'root', 'teacher', 'professeur']);
 // Safety valve against someone hammering the server (guesses per second, per student).
 const GUESS_RATE_PER_SEC = Number(process.env.GUESS_RATE_PER_SEC) || 1000;
 const COOKIE_NAME = 'ctp_token';
@@ -123,6 +130,19 @@ const myBestStmt = db.prepare(`${BEST_CTE}
   SELECT level, duration_ms, finished_at, guesses
   FROM best WHERE user_id = ? AND rn = 1`);
 
+// Read-only view of the whole database for the admin account's "Base de données" page.
+// Deliberately leaves out password_hash: even for the admin, a real account's password hash is
+// never sent to the browser (it could be cracked offline, and a student may have reused that
+// password elsewhere). There is no corresponding INSERT/UPDATE/DELETE route - view only.
+const adminUsersStmt = db.prepare('SELECT id, username, created_at FROM users ORDER BY id ASC');
+const adminAttemptsStmt = db.prepare(`
+  SELECT a.id, a.user_id, u.username, a.level, a.secret, a.started_at, a.guesses, a.status,
+         a.finished_at, a.duration_ms
+  FROM attempts a JOIN users u ON u.id = a.user_id
+  ORDER BY a.id DESC
+  LIMIT 5000
+`);
+
 // --------------------------------------------------------------- helpers ---
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,20}$/;
 // Hash compared against when the username is unknown, so timing doesn't reveal it.
@@ -183,6 +203,12 @@ function rankOf(rows, userId) {
   return i === -1 ? null : i + 1;
 }
 
+// Whether this account is the teacher's reserved account (see RESERVED_USERNAMES). It's what
+// unlocks the read-only "Base de données" page - nothing else in the app treats it specially.
+function isAdminUser(user) {
+  return RESERVED_USERNAMES.has(user.username.toLowerCase());
+}
+
 // ------------------------------------------------------------------- app ---
 const app = express();
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : process.env.TRUST_PROXY);
@@ -238,6 +264,9 @@ app.post('/api/register', registerLimiter, (req, res) => {
       error: 'Le nom d\'utilisateur doit faire 3 à 20 caractères : lettres, chiffres, point, tiret ou tiret bas.',
     });
   }
+  if (RESERVED_USERNAMES.has(username.toLowerCase())) {
+    return res.status(409).json({ error: 'Ce nom d\'utilisateur est réservé.' });
+  }
   if (typeof password !== 'string' || password.length < 8) {
     return res.status(400).json({ error: 'Votre mot de passe doit faire au moins 8 caractères.' });
   }
@@ -276,6 +305,7 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', (req, res) => {
   const user = userFromRequest(req);
   if (!user) return res.json({ user: null });
+  const isAdmin = isAdminUser(user);
 
   const best = new Map(myBestStmt.all(user.id).map((r) => [r.level, r]));
   const active = new Map(q.activeAll.all(user.id).map((r) => [r.level, r]));
@@ -284,36 +314,66 @@ app.get('/api/me', (req, res) => {
   const progress = LEVELS.map((level) => {
     const b = best.get(level);
     const a = active.get(level);
-    const { category, length, charset, prev } = LEVEL_DEFS[level];
+    const { category, length, charset, requires } = LEVEL_DEFS[level];
     return {
       level,
       category,
-      prev,
+      requires,
       length,
       charset,
       possibilities: charset.length ** length,
       totalAttempts: attemptTotals.get(level) || 0,
-      unlocked: prev === null || best.has(prev),
+      unlocked: requires.every((r) => best.has(r)),
       best: b ? { durationMs: b.duration_ms, finishedAt: b.finished_at, guesses: b.guesses } : null,
       active: a ? { startedAt: a.started_at, guesses: a.guesses } : null,
     };
   });
 
   res.json({
-    user,
+    user: { ...user, isAdmin },
     config: { levels: LEVELS },
     progress,
     serverNow: Date.now(),
   });
 });
 
+// ------------------------------------------------------------------ admin ---
+// Read-only: the admin account can look at every row in the database, but there is no route
+// here (or anywhere else) that lets it add, change or delete anything through this page.
+app.get('/api/admin/overview', auth, (req, res) => {
+  if (!isAdminUser(req.user)) {
+    return res.status(403).json({ error: 'Accès réservé au compte administrateur.' });
+  }
+  const users = adminUsersStmt.all().map((r) => ({
+    id: r.id,
+    username: r.username,
+    createdAt: r.created_at,
+  }));
+  const attempts = adminAttemptsStmt.all().map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    username: r.username,
+    level: r.level,
+    secret: r.secret,
+    startedAt: r.started_at,
+    guesses: r.guesses,
+    status: r.status,
+    finishedAt: r.finished_at,
+    durationMs: r.duration_ms,
+  }));
+  res.json({ users, attempts });
+});
+
 // ----------------------------------------------------------------- game ----
 app.post('/api/levels/:level/start', auth, (req, res) => {
   const level = parseLevel(req.params.level);
   if (level === null) return res.status(404).json({ error: 'Niveau inconnu.' });
-  const { prev } = LEVEL_DEFS[level];
-  if (prev !== null && !q.hasDone.get(req.user.id, prev)) {
-    return res.status(403).json({ error: `Cassez d'abord le niveau ${prev}.` });
+  const { requires } = LEVEL_DEFS[level];
+  const missing = requires.filter((r) => !q.hasDone.get(req.user.id, r));
+  if (missing.length) {
+    return res.status(403).json({
+      error: `Cassez d'abord le${missing.length > 1 ? 's' : ''} niveau${missing.length > 1 ? 'x' : ''} ${missing.join(', ')}.`,
+    });
   }
 
   let attempt = q.active.get(req.user.id, level);
@@ -365,7 +425,7 @@ app.post('/api/levels/:level/guess', auth, guessLimiter, (req, res) => {
     rank: rankOf(board, req.user.id),
     players: board.length,
     possibilities: charset.length ** length,
-    nextLevelUnlocked: LEVELS.some((l) => LEVEL_DEFS[l].prev === level),
+    nextLevelUnlocked: LEVELS.some((l) => LEVEL_DEFS[l].requires.includes(level)),
   });
 });
 

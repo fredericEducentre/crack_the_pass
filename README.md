@@ -86,6 +86,43 @@ npm run reset -- --all   # also deletes every student account
 
 Stop the server first if you want to be extra safe. You can also just delete the `data/` folder.
 
+## Optional bonus challenge: a real account to log into
+
+Unlike the levels above (a random throwaway secret per run), this is a **real account you create
+yourself**, with a real password, that students try to log into through the normal sign-in form —
+not through any game mechanic. It has no secret, no timer, and **does not appear in the levels or in
+any leaderboard**.
+
+```bash
+npm run create-admin -- admin "une phrase de douze !"
+# or directly:
+node scripts/create-admin.js admin "une phrase de douze !"
+```
+
+This creates (or resets the password of) a real account. Running it again with the same username
+changes its password, so you can rotate it between classes. A few usernames (`admin`,
+`administrateur`, `administrator`, `root`, `teacher`, `professeur`) are reserved: students can never
+register them through the sign-up form, so the one you pick stays free for you to claim.
+
+Students log into it exactly like their own account — sign out, then sign in with that username and
+their guess. The same password hashing, the same per-username login rate limit (10 failed attempts
+per 15 minutes) and the same session cookie apply as for everyone else: the only thing special about
+this account is what it unlocks once signed in. That rate limit is itself part of the lesson: it is
+what actually makes a weak password survive guessing through the login form, as opposed to the
+unprotected `/guess` endpoint the levels above use.
+
+### What logging in as this account unlocks: a read-only "database" page
+
+Once signed in as a reserved username, a **"Base de données"** link appears in the nav, leading to a
+page that lists every account and every attempt (secret, level, status, guesses, timing) across every
+student. It is **read-only**: there is no button and no API route to add, edit or delete anything from
+it — only `GET /api/admin/overview`, guarded server-side so any other account gets a 403. It never
+returns password hashes, even to this account: that stays off-limits so a real student's real
+password (which they may reuse elsewhere) can never be pulled out and cracked offline through the app.
+
+Never reuse a password you use anywhere else for this account, and don't tell students it when you
+want them to guess it.
+
 ## Optional: show them what automation does
 
 `examples/bruteforce.js` is a tiny script that logs in as a student and tries every combination:
@@ -106,6 +143,7 @@ server.js                 Express API: auth, levels, guesses, leaderboards
 db.js                     SQLite schema (users, attempts)
 public/                   Single page frontend (index.html, style.css, app.js)
 scripts/reset-leaderboard.js
+scripts/create-admin.js
 examples/bruteforce.js
 data/                     Created on first run (database + session key)
 ```
@@ -116,3 +154,6 @@ Account passwords are hashed with bcrypt and must be at least 8 characters (the 
 weak passwords shouldn't accept them). Sessions are signed, `httpOnly` cookies. Login attempts are
 rate-limited per username, API writes require JSON, and the page renders all user-provided text as plain
 text. It is meant for a classroom, so tell students not to reuse a real password.
+
+A handful of usernames are reserved (see `RESERVED_USERNAMES` in `server.js`) so students can't grab
+them through self-registration; they stay free for the optional bonus-challenge account above.

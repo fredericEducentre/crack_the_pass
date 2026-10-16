@@ -192,6 +192,10 @@ input[type="text"]:focus, input[type="password"]:focus { border-color: var(--inf
 .category-head h2 { margin: 0 0 2px; font-size: 1.35rem; color: var(--accent); }
 .category-head p { margin: 0 0 14px; font-size: 0.92rem; }
 
+.bonus-challenge { margin-top: 30px; border-style: dashed; }
+.bonus-challenge h2 { margin: 0 0 10px; font-size: 1.1rem; }
+.bonus-challenge code { font-family: var(--mono); color: var(--text); background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+
 .levels { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 @media (max-width: 640px) { .levels { grid-template-columns: 1fr; } }
 
@@ -276,7 +280,7 @@ ol.api-list li { padding-left: 4px; }
 .play .slots-preview { justify-content: center; margin: 14px 0 18px; }
 .play .rules { color: var(--muted); }
 .play .eyebrow { margin-bottom: 16px; }
-.play .rules code, .lesson code { font-family: var(--mono); color: var(--text); background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+.play .rules code { font-family: var(--mono); color: var(--text); background: var(--bg); padding: 1px 6px; border-radius: 5px; }
 
 .hud { display: flex; justify-content: center; gap: clamp(16px, 6vw, 48px); margin: 8px 0 22px; }
 .hud .label { font: 600 0.7rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
@@ -354,6 +358,11 @@ tr.me td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .board-tabs a.current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .empty { text-align: center; color: var(--muted); padding: 28px 8px; }
 .board-note { margin: 14px 2px 0; color: var(--muted); font-size: 0.82rem; }
+
+/* ---------- admin page ---------- */
+.admin-search { max-width: 320px; }
+.card + h2, h2 + .card { margin-top: 10px; }
+.card .table-scroll { max-height: 480px; overflow-y: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

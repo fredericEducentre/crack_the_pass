@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
     "dev": "node --watch --disable-warning=ExperimentalWarning server.js",
-    "reset": "node --disable-warning=ExperimentalWarning scripts/reset-leaderboard.js"
+    "reset": "node --disable-warning=ExperimentalWarning scripts/reset-leaderboard.js",
+    "create-admin": "node --disable-warning=ExperimentalWarning scripts/create-admin.js"
   },
   "engines": {
     "node": ">=22.13"
