@@ -601,7 +601,6 @@
   async function renderLevels() {
     await loadMe();
     renderNav('levels');
-    mountMatrixRain();
     app.replaceChildren(
       h('section', { class: 'mb-6' },
         h('h1', { class: H1 }, 'À quelle vitesse savez-vous casser un mot de passe ?'),
