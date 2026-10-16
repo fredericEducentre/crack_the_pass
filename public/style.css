@@ -364,6 +364,25 @@ tr.me td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .card + h2, h2 + .card { margin-top: 10px; }
 .card .table-scroll { max-height: 480px; overflow-y: auto; }
 
+/* Décor "pluie de caractères" dans les marges, seulement là où il y a la place (écran large). */
+.matrix-rain {
+  position: fixed;
+  top: 57px; /* sous la barre du haut */
+  /* <canvas> est un élément remplacé : avec height "auto" il garde sa taille intrinsèque
+     (300x150) même en position fixe, "top" + "bottom" seuls ne suffisent pas. On fixe donc
+     la hauteur explicitement. */
+  height: calc(100vh - 57px);
+  width: 90px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.5;
+}
+.matrix-rain-left { left: 0; }
+.matrix-rain-right { right: 0; }
+@media (max-width: 1240px) {
+  .matrix-rain { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

@@ -37,6 +37,80 @@
     return el;
   }
 
+  function hexToRgba(hex, alpha) {
+    const h2 = hex.replace('#', '');
+    const r = parseInt(h2.slice(0, 2), 16);
+    const g = parseInt(h2.slice(2, 4), 16);
+    const b = parseInt(h2.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  // Petite pluie de caractères façon Matrix, purement décorative, sur un <canvas>. Ignorée si
+  // l'utilisateur préfère moins d'animations ; renvoie une fonction "stop" à appeler en quittant.
+  function matrixRain(canvas) {
+    const ctx = canvas.getContext('2d');
+    const chars = '01<>[]{}()!@#$%^&*=+-_~/\\|ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    const fontSize = 16;
+    const styles = getComputedStyle(document.documentElement);
+    const fadeColor = hexToRgba(styles.getPropertyValue('--bg').trim() || '#0a0e14', 0.12);
+    const dropColor = styles.getPropertyValue('--accent').trim() || '#35f0a0';
+    let cols = 0;
+    let drops = [];
+    let raf = null;
+    let lastStep = 0;
+    const stepInterval = 110; // ms entre deux descentes d'une rangée : plus grand = plus lent
+
+    function resize() {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      cols = Math.max(1, Math.floor(canvas.width / fontSize));
+      drops = Array.from({ length: cols }, () => Math.random() * -40);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // La boucle rAF tourne à la vitesse de l'écran (fluide), mais on ne fait avancer
+    // la pluie que toutes les `stepInterval` ms, pour qu'elle tombe lentement.
+    function tick(now) {
+      if (canvas.offsetWidth > 0 && now - lastStep >= stepInterval) {
+        lastStep = now;
+        ctx.fillStyle = fadeColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = dropColor;
+        ctx.font = `${fontSize}px monospace`;
+        for (let i = 0; i < cols; i++) {
+          ctx.fillText(chars[(Math.random() * chars.length) | 0], i * fontSize, drops[i] * fontSize);
+          if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+          drops[i]++;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
+  }
+
+  // Monte la pluie Matrix des deux côtés de l'écran pour la vue courante. Ajoutée au <body>
+  // (pas à #app, vidé à chaque rendu) et toujours démontée via onLeave au changement de page.
+  function mountMatrixRain() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const rainLeft = h('canvas', { class: 'matrix-rain matrix-rain-left', 'aria-hidden': 'true' });
+    const rainRight = h('canvas', { class: 'matrix-rain matrix-rain-right', 'aria-hidden': 'true' });
+    document.body.append(rainLeft, rainRight);
+    const stopLeft = matrixRain(rainLeft);
+    const stopRight = matrixRain(rainRight);
+    onLeave(() => {
+      stopLeft();
+      stopRight();
+      rainLeft.remove();
+      rainRight.remove();
+    });
+  }
+
   async function api(path, { method = 'GET', body } = {}) {
     const res = await fetch('/api' + path, {
       method,
@@ -689,6 +763,8 @@
   async function renderAdmin() {
     renderNav('admin');
     if (!state.user.isAdmin) return app.replaceChildren(errorCard('Cette page est réservée au compte administrateur.'));
+
+    mountMatrixRain();
 
     const search = h('input', { type: 'text', placeholder: 'Filtrer par élève…', class: 'admin-search' });
     const usersBox = h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Chargement…'));
