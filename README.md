@@ -18,6 +18,12 @@ Open <http://localhost:3000>. To let students on the same network join, give the
 
 Requires **Node.js 22.13 or newer** (check with `node -v`). There is nothing to compile: the database is SQLite built into Node, so `npm install` only downloads plain JavaScript packages.
 
+The page is styled with [Tailwind CSS](https://tailwindcss.com) loaded from a CDN (`<script src="https://cdn.tailwindcss.com">`
+in `index.html`), not a build step. This means **every student's browser needs Internet access for the
+page to be styled** (the game itself — login, levels, API — only ever needs your local network). On a
+classroom LAN with no Internet, the page still works but renders unstyled. If that's a problem, switch
+to a locally built Tailwind CSS file instead.
+
 ## How the game works
 
 Levels are grouped in three categories. A category fixes which characters the secret is made of;
@@ -141,7 +147,7 @@ discover scripting themselves, or hand it out to start the conversation.
 ```
 server.js                 Express API: auth, levels, guesses, leaderboards
 db.js                     SQLite schema (users, attempts)
-public/                   Single page frontend (index.html, style.css, app.js)
+public/                   Single page frontend (index.html, app.js — styled with Tailwind via CDN, no build step)
 scripts/reset-leaderboard.js
 scripts/create-admin.js
 examples/bruteforce.js

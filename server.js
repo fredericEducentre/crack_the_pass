@@ -214,9 +214,17 @@ const app = express();
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : process.env.TRUST_PROXY);
 app.disable('x-powered-by');
 // Classroom setups often serve plain http on a LAN, so don't force https upgrades.
+// script-src explicitly allows the Tailwind Play CDN the page loads its styling from
+// (public/index.html + public/tailwind-config.js) - everything else stays same-origin only.
 app.use(
   helmet({
-    contentSecurityPolicy: { useDefaults: true, directives: { 'upgrade-insecure-requests': null } },
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'upgrade-insecure-requests': null,
+        'script-src': ["'self'", 'https://cdn.tailwindcss.com'],
+      },
+    },
   })
 );
 app.use(express.json({ limit: '2kb' }));

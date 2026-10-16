@@ -7,17 +7,27 @@
   <meta name="theme-color" content="#0a0e14">
   <title>Crack the Pass</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Cpath d='M8 11l6 5-6 5' fill='none' stroke='%2335f0a0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M17 22h8' stroke='%2335f0a0' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css">
+  <!-- Tailwind via le CDN (Play CDN) : pas d'étape de build, mais ça veut dire que le style
+       a besoin d'Internet au chargement de la page (choix assumé : voir la conversation).
+       Le serveur autorise explicitement ce domaine dans sa Content-Security-Policy (server.js). -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/tailwind-config.js"></script>
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="#/levels" aria-label="Crack the Pass accueil">crack<span>_</span>the<span>_</span>pass<i class="cursor" aria-hidden="true"></i></a>
-    <nav id="nav" aria-label="Main"></nav>
+<body class="min-h-screen flex flex-col bg-bg text-ink font-sans text-base leading-[1.55] [background-image:radial-gradient(900px_420px_at_80%_-10%,rgba(53,240,160,0.07),transparent_60%)]">
+  <header class="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-8 py-3 bg-[#0a0e14]/85 backdrop-blur-sm border-b border-border">
+    <a href="#/levels" aria-label="Crack the Pass accueil"
+       class="font-mono font-bold text-[1.15rem] text-ink no-underline whitespace-nowrap">
+      crack<span class="text-accent">_</span>the<span class="text-accent">_</span>pass<i aria-hidden="true"
+        class="inline-block w-[0.55em] h-[1.05em] ml-1 align-[-0.15em] bg-accent animate-blink motion-reduce:animate-none"></i>
+    </a>
+    <nav id="nav" aria-label="Main" class="flex items-center gap-1.5 flex-wrap justify-end"></nav>
   </header>
 
-  <main id="app"><p class="loading">Chargement…</p></main>
+  <main id="app" class="flex-1 w-full max-w-[960px] mx-auto px-4 sm:px-8 py-5 sm:py-10">
+    <p class="text-muted">Chargement…</p>
+  </main>
 
-  <footer class="foot">
+  <footer class="text-center text-muted text-xs px-4 py-5 pb-7">
     Jeu éducatif : il montre à quelle vitesse les mots de passe courts tombent. Ne réutilisez jamais un vrai mot de passe ici.
   </footer>
 
